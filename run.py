@@ -26,9 +26,9 @@ if __name__ == '__main__':
     # data loader
     parser.add_argument('--data', type=str, default='custom', help='dataset type')
     # parser.add_argument('--root_path', type=str, default='./dataset/traffic', help='root path of the data file')
-    parser.add_argument('--root_path', type=str, default='/data/data_1/zxy/pathformer-main/data-preparation', help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='sst_20000_22000_points.csv', help='data file')
-    parser.add_argument('--data_path2', type=str, default='velocity_20000_22000_points.csv', help='data file2')
+    parser.add_argument('--root_path', type=str, default='/dataset', help='root path of the data file')
+    parser.add_argument('--data_path', type=str, default='sst.csv', help='data file')
+    parser.add_argument('--data_path2', type=str, default='velocity.csv', help='data file2')
 
     parser.add_argument('--features', type=str, default='M',
                         help='forecasting task, options:[M, S]; M:multivariate predict multivariate, S:univariate predict univariate')
