@@ -4,17 +4,17 @@ This is the code for paper:
 > 
 ## Dependencies
 Recent versions of the following packages for Python 3 are required:
-einops==0.7.0
-numpy==1.24.4
-pandas==2.0.3
-Pillow==10.1.0
-scikit-learn==1.3.2
-scipy==1.10.1
-torch==1.13.1
-torchaudio==0.10.1+cu111
-torchvision==0.11.2+cu111
-tornado==6.4
-tqdm==4.66.1
+* einops==0.7.0
+* numpy==1.24.4
+* pandas==2.0.3
+* Pillow==10.1.0
+* scikit-learn==1.3.2
+* scipy==1.10.1
+* torch==1.13.1
+* torchaudio==0.10.1+cu111
+* torchvision==0.11.2+cu111
+* tornado==6.4
+* tqdm==4.66.1
 
 ## Datasets
 All of the datasets we use are publicly available datasets.
