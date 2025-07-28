@@ -26,7 +26,7 @@ warnings.filterwarnings('ignore')
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
-        self.adj_haversine = None  # 初始化 adj_haversine 属性为 None
+        self.adj_haversine = None
         self.weight = 1
 
 
@@ -54,13 +54,9 @@ class Exp_Main(Exp_Basic):
         return criterion
 
     def get_reciprocal_laplacian(self,laplacian_diff):
-        """
-        处理三维拉普拉斯矩阵的倒数
-        """
         epsilon = 1e-12
         # 添加微小常数避免除零
         protected_matrix = laplacian_diff + epsilon
-        # 计算倒数并处理符号（拉普拉斯矩阵可能有负值）
         reciprocal = np.where(np.abs(laplacian_diff) > epsilon,
                               1.0 / protected_matrix,
                               0)
@@ -69,8 +65,7 @@ class Exp_Main(Exp_Basic):
     def diffgraph(self):
         if self.adj_haversine is not None:
             return self.adj_haversine, self.laplacian_diff, self.laplacian_heat
-        # 加载数据
-        self.adj_haversine = np.load('/data/data_1/zxy/pathformer-main/data-preparation/adj_haversine_20000_22000.npy')
+        self.adj_haversine = np.load('/dataset/adj_haversine.npy')
         self.g_diff = self.get_reciprocal_laplacian(self.adj_haversine)
         degree_matrix_diff = np.diag(np.sum(self.g_diff, axis=1))
         laplacian_diff = degree_matrix_diff-self.g_diff
@@ -87,9 +82,6 @@ class Exp_Main(Exp_Basic):
     # def diffgraph(self):
     #     if self.adj_haversine is not None:
     #         return self.adj_haversine, self.laplacian_diff, self.laplacian_heat
-    #     # 加载数据
-    #     self.adj_haversine = np.load('/data/data_1/zxy/Env4Cast-main/data-preparation/adj_haversine_20000_22000.npy')
-    #
     #     degree_matrix = np.diag(np.sum(self.adj_haversine, axis=1))
     #     # 计算拉普拉斯矩阵 L = D - A
     #     laplacian_diff = degree_matrix - self.adj_haversine
