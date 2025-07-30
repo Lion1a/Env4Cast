@@ -2,7 +2,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # 读取宽表数据
-df = pd.read_csv('/data/data_1/zxy/pathformer-main/data-preparation/beijing_pm25.csv')
+df = pd.read_csv('beijing_pm25.csv')
 
 # 确保 utc_time 是 datetime 类型并设为索引
 df['utc_time'] = pd.to_datetime(df['utc_time'])
@@ -40,4 +40,4 @@ df_cleaned = df.drop(index=to_drop_times)
 
 # 重置索引并保存
 df_cleaned.reset_index(inplace=True)
-df_cleaned.to_csv('/data/data_1/zxy/pathformer-main/data-preparation/beijing_pm25_interpolated.csv', index=False)
+df_cleaned.to_csv('beijing_pm25_interpolated.csv', index=False)
