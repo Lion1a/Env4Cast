@@ -13,12 +13,68 @@ import torch.nn.functional as F
 from functools import reduce
 from operator import mul
 
-device = torch.device('cuda:5' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+class CorrGraphConv(nn.Module):
+    def __init__(self, in_features, out_features, activation=F.relu):
+        super(CorrGraphConv, self).__init__()
+        self.Ws = nn.Parameter(torch.randn(12, out_features))
+        self.Wt = nn.Parameter(torch.randn(in_features, out_features))
+        self.proj_part1 = nn.Linear(512, 12)
+        self.proj_part2 = nn.Linear(512, 2000)
+
+        self.activation = activation
+
+    def normalize_to_range(self, tensor, min_val=-1.0, max_val=1.0):
+        t_min = tensor.min(dim=-1, keepdim=True)[0]
+        t_max = tensor.max(dim=-1, keepdim=True)[0]
+        # 避免除零
+        scale = (t_max - t_min).clamp(min=1e-8)
+        return (tensor - t_min) / scale * (max_val - min_val) + min_val
+
+    def forward(self, H, A, Desired_Corr):
+        # 保证 H 的 shape 是 (B, N, F)
+        B, d1, d2 = H.shape
+        N = A.shape[-1]  # 节点数
+
+        if d1 == N:
+            # 正确的 (B,N,F)
+            pass
+        elif d2 == N:
+            # 错误的 (B,F,N)，需要转置
+            H = H.transpose(1, 2)  # (B,N,F)
+        else:
+            raise ValueError(f"H shape {H.shape} 不匹配邻接矩阵 N={N}")
+
+        # 然后再做投影
+        H_Ws = torch.matmul(H, self.Ws)  # (B, N, F_out)
+        H = H.transpose(1, 2)  # (B,N,F)
+        H_Wt = torch.matmul(H, self.Wt)  # (B, N, F_out)
+
+        if A.dim() == 2:
+            part1 = torch.einsum("ij,bjf->bif", A, H_Ws)
+        else:
+            part1 = torch.einsum("bij,bjf->bif", A, H_Ws)
+
+        if Desired_Corr.dim() == 2:
+            part2 = torch.einsum("ij,bjf->bif", Desired_Corr, H_Wt)
+        else:
+            part2 = torch.einsum("bij,bjf->bif", Desired_Corr, H_Wt)
+        part1 = self.proj_part1(part1)  # (B, N, 12)
+        part1 = part1.transpose(1, 2)
+        part2 = self.proj_part2(part2)  # (B, T, 2000)
+        t_min = part2.min()
+        t_max = part2.max()
+        scale = (t_max - t_min).clamp(min=1e-8)  # 避免除以0
+        part2 = (part2 - t_min) / scale
+        out = self.activation(part1 + part2)
+        return out
+
 
 class Model(nn.Module):
     def __init__(self, configs):
         super(Model, self).__init__()
-        self.layer_nums = configs.layer_nums
+        self.layer_nums = configs.layer_nums 
         self.num_nodes = configs.num_nodes
         self.pre_len = configs.pred_len
         self.seq_len = configs.seq_len
@@ -45,7 +101,7 @@ class Model(nn.Module):
 
         self.device = torch.device('cuda:{}'.format(configs.gpu))
         self.batch_norm = configs.batch_norm
-        self.GLM = CrossGraphLearningModel(in_features=12, out_features=256)
+        self.GLM = CrossGraphLearningModel(in_features=12, out_features=256)  # 假设输入特征是10维，输出特征是32维
 
         for num in range(self.layer_nums):
             self.AMS_lists.append(
@@ -58,7 +114,7 @@ class Model(nn.Module):
 
 
     def min_max_normalization(self,matrix):
-        matrix = torch.tensor(matrix).cuda(5)
+        matrix = torch.tensor(matrix).cuda(0)  # 将 NumPy 数组转换为 PyTorch 张量并移动到 GPU
         mean = torch.mean(matrix)
         std = torch.std(matrix)
         return (matrix - mean) / std
@@ -80,7 +136,7 @@ class Model(nn.Module):
                 norm_product = np.linalg.norm(v_i) * np.linalg.norm(d_ij) + eps
 
                 cos_xi = dot / norm_product
-                angle_matrix[i, j] = cos_xi
+                angle_matrix[i, j] = cos_xi  # 注意：不是角度，而是 cos 值
         return angle_matrix
 
     def get_reciprocal_laplacian(self,laplacian_diff):
@@ -90,6 +146,7 @@ class Model(nn.Module):
         epsilon = 1e-12
         # 添加微小常数避免除零
         protected_matrix = laplacian_diff + epsilon
+        # 计算倒数并处理符号（拉普拉斯矩阵可能有负值）
         reciprocal = np.where(np.abs(laplacian_diff) > epsilon,
                               1.0 / protected_matrix,
                               0)
@@ -101,6 +158,48 @@ class Model(nn.Module):
         if t_max - t_min < 1e-8:
             return torch.zeros_like(tensor) + min_val
         return (tensor - t_min) / (t_max - t_min) * (max_val - min_val) + min_val
+
+    def compute_desired_corr(self,H, gamma=0.1):
+        """
+        计算 Desired_Corr 矩阵
+        H: 节点特征 (batch, seq_len, d_model)，例如 (4, 12, 2000)
+        gamma: 时间差衰减系数
+
+        返回:
+        Desired_Corr: (batch, seq_len, seq_len)
+        """
+        batch_size, seq_len, d_model = H.shape
+
+        # F.normalize 保证按最后一维归一化
+        H_norm = F.normalize(H, p=2, dim=-1)  # (B, L, d_model)
+        cos_sim = torch.matmul(H_norm, H_norm.transpose(1, 2))  # (B, L, L)
+
+        time_index = torch.arange(seq_len, device=H.device).float()
+        time_diff = torch.abs(time_index[None, :] - time_index[:, None])  # (L, L)
+        time_decay = torch.exp(-gamma * time_diff)  # (L, L)
+
+        Desired_Corr = cos_sim * time_decay  # (B, L, L)
+
+        return Desired_Corr
+
+    def normalize_adj(self, A):
+        """
+        对邻接矩阵 A 做对称归一化: D^{-1/2} (A+I) D^{-1/2}
+        输入:
+            A: torch.Tensor, (N,N)
+        输出:
+            A_norm: torch.Tensor, (N,N)
+        """
+        # 加自环
+        A_hat = A + torch.eye(A.size(0), device=A.device)
+
+        # 计算度矩阵
+        degree = torch.sum(A_hat, dim=1)  # (N,)
+        D_inv_sqrt = torch.diag(torch.pow(degree, -0.5))
+
+        # 对称归一化
+        A_norm = torch.mm(torch.mm(D_inv_sqrt, A_hat), D_inv_sqrt)
+        return A_norm
 
     def forward(self, x,velo,adj_haversine, laplacian_diff, laplacian_heat):
         # print(x.shape, velo.shape)
@@ -127,11 +226,11 @@ class Model(nn.Module):
         G_ns[torch.isinf(G_ns)] = 0
         # degree_matrix = np.diag(np.sum(adj_haversine, axis=1))
         degree_ns = torch.diag(torch.sum(G_ns, axis=1))
-        G_ns = torch.tensor(G_ns).cuda(5)
+        G_ns = torch.tensor(G_ns).cuda(0)  # 将 NumPy 数组转换为 PyTorch 张量并移动到 GPU
 
-        degree_ns = torch.tensor(degree_ns).cuda(5)
+        # degree_matrix = torch.tensor(degree_matrix).cuda(2)  # 将 NumPy 数组转换为 PyTorch 张量并移动到 GPU
+        degree_ns = torch.tensor(degree_ns).cuda(0)  # 将 NumPy 数组转换为 PyTorch 张量并移动到 GPU
 
-        # 计算拉普拉斯矩阵 L = D - A
         laplacian_ns = degree_ns - G_ns
 
         # laplacian_diff = self.get_reciprocal_laplacian(laplacian_diff)
@@ -181,22 +280,49 @@ class Model(nn.Module):
         if self.revin:
             out = self.revin_layer(out, 'denorm')
         out2 =self.beta*(result1_norm + result2_norm + result3_norm)
+
         out2_flattened = out2.reshape(-1, 12)
         out2_mapped = self.projections2(out2_flattened)
         out2 = out2_mapped.reshape(4, 2000, 12).permute(0, 2, 1)  # → (4, 12, 2000)
+
         out_3 = out + out2
+        # out_3 = out
+
+        Desired_Corr = self.compute_desired_corr(out_3, gamma=0.1)  # (4, 12, 12)
+
+        # 图卷积
+        A = torch.tensor(adj_haversine, dtype=torch.float32, device=out_3.device)
+        A.fill_diagonal_(1.0) 
+        A = self.normalize_adj(A)  # 得到归一化后的邻接矩阵
+
+        graph_conv = CorrGraphConv(in_features=2000, out_features=512).to(out_3.device)
+
+        out_4 = graph_conv(out_3, A, Desired_Corr)  # (4,12,512)
+        out4 = self.beta * out_4
+        out4_flattened = out4.reshape(-1, 12)
+        out4_mapped = self.projections2(out4_flattened)
+        out4 = out4_mapped.reshape(4, 2000, 12).permute(0, 2, 1)  # → (4, 12, 2000)
+        out_3 = out_3 + out4
 
         out = out.permute(0, 2, 1)
         out2 = out2.permute(0, 2, 1)
+
         B, N, T = out.shape
+
+        # Flatten batch and position to get embeddings for contrastive learning
         out_flat = out.reshape(B * N, T)  # (B*N, T)
         out2_flat = out2.reshape(B * N, T)  # (B*N, T)
         out_flat = F.normalize(out_flat, dim=1)
         out2_flat = F.normalize(out2_flat, dim=1)
+
+        # Compute similarity matrix: (B*N, B*N)
         similarity_matrix = torch.matmul(out_flat, out2_flat.T)
+
+        # Create labels: for each i, positive is at the same index (i)
         labels = torch.arange(B * N).to(out.device)
+
+        # Mask diagonal as positive, off-diagonal as negative
         contrastive_loss = F.cross_entropy(similarity_matrix / 0.1, labels)
+        # print(contrastive_loss.item())
 
         return out_3, balance_loss, self.c_w*contrastive_loss
-
-
