@@ -108,13 +108,13 @@ class Exp_Main(Exp_Basic):
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
                         if self.args.model=='Env4Cast':
-                            outputs, balance_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                            outputs, balance_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                         else:
                             outputs = self.model(batch_x,batch_velo,self.adj_haversine)
 
                 else:
                     if self.args.model=='Env4Cast':
-                        outputs, balance_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                        outputs, balance_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                     else:
                         outputs = self.model(batch_x,batch_velo,self.adj_haversine)
                 f_dim = -1 if self.args.features == 'MS' else 0
@@ -185,7 +185,7 @@ class Exp_Main(Exp_Basic):
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
                         if self.args.model=='Env4Cast':
-                            outputs, balance_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                            outputs, balance_loss,  = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                         else:
                             outputs = self.model(batch_x,batch_velo)
 
@@ -196,7 +196,7 @@ class Exp_Main(Exp_Basic):
                         train_loss.append(loss.item())
                 else:
                     if self.args.model == 'Env4Cast':
-                        outputs, balance_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                        outputs, balance_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                     else:
                         outputs = self.model(batch_x,batch_velo)
                     f_dim = -1 if self.args.features == 'MS' else 0
@@ -204,7 +204,7 @@ class Exp_Main(Exp_Basic):
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                     loss = criterion(outputs, batch_y)
                     if self.args.model=="Env4Cast":
-                        loss = loss + balance_loss + self.weight*contrastive_loss
+                        loss = loss + balance_loss
 
                     train_loss.append(loss.item())
 
@@ -278,12 +278,12 @@ class Exp_Main(Exp_Basic):
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
                         if self.args.model=='Env4Cast':
-                            outputs, balance_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                            outputs, balance_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                         else:
                             outputs = self.model(batch_x,batch_velo,self.adj_haversine)
                 else:
                     if self.args.model == 'Env4Cast':
-                        outputs, balance_loss,contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                        outputs, balance_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                     else:
                         outputs = self.model(batch_x,batch_velo)
                 f_dim = -1 if self.args.features == 'MS' else 0
@@ -357,13 +357,13 @@ class Exp_Main(Exp_Basic):
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
                         if self.args.model=='Env4Cast':
-                            outputs, a_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                            outputs, a_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                         else:
                             outputs = self.model(batch_x,batch_velo,self.adj_haversine)
 
                 else:
                     if self.args.model == 'Env4Cast':
-                        outputs, a_loss, contrastive_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
+                        outputs, a_loss = self.model(batch_x,batch_velo,self.adj_haversine, self.laplacian_diff, self.laplacian_heat)
                     else:
                         outputs = self.model(batch_x,batch_velo,self.adj_haversine)
                 pred = outputs.detach().cpu().numpy()  # .squeeze()
