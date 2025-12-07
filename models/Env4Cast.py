@@ -80,7 +80,6 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.k = configs.k
         self.beta=0.01
-        self.c_w=0.001
         self.num_experts_list = configs.num_experts_list
         self.patch_size_list = configs.patch_size_list
         self.d_model = configs.d_model
@@ -304,25 +303,4 @@ class Model(nn.Module):
         out4 = out4_mapped.reshape(4, 2000, 12).permute(0, 2, 1)  # → (4, 12, 2000)
         out_3 = out_3 + out4
 
-        out = out.permute(0, 2, 1)
-        out2 = out2.permute(0, 2, 1)
-
-        B, N, T = out.shape
-
-        # Flatten batch and position to get embeddings for contrastive learning
-        out_flat = out.reshape(B * N, T)  # (B*N, T)
-        out2_flat = out2.reshape(B * N, T)  # (B*N, T)
-        out_flat = F.normalize(out_flat, dim=1)
-        out2_flat = F.normalize(out2_flat, dim=1)
-
-        # Compute similarity matrix: (B*N, B*N)
-        similarity_matrix = torch.matmul(out_flat, out2_flat.T)
-
-        # Create labels: for each i, positive is at the same index (i)
-        labels = torch.arange(B * N).to(out.device)
-
-        # Mask diagonal as positive, off-diagonal as negative
-        contrastive_loss = F.cross_entropy(similarity_matrix / 0.1, labels)
-        # print(contrastive_loss.item())
-
-        return out_3, balance_loss, self.c_w*contrastive_loss
+        return out_3, balance_loss
